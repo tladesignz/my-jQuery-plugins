@@ -1,3 +1,4 @@
+/*jslint white: false, plusplus: false, immed: false */
 /**
  * Construct a jQuery.postForm() function.
  * @class jQuery.postForm() uses jQuery.post() to post all elements of a form, like
@@ -7,12 +8,17 @@
  *
  * Usage:
  *
- * jQuery.postForm(
- *     'test.pl',
- *     form,
- *     function( data ) { console.debug( data ) },  * optional
- *     'json'               * optional
- * );
+ * $( document.myform.mysubmitbutton ).click( function( evt ) {
+ * 		jQuery.postForm(
+ * 			'http://myserver/myformhandler',
+ * 			document.myform,
+ * 			function( data ) { console.debug( data ); },	// optional
+ * 			'json',											// optional
+ * 			evt.target										// optional
+ * 		);
+ *
+ * 		return false;
+ * }
  *
  * Copyright (c) 2009 Benjamin Erhart, http://www.tladesignz.com/
  *
@@ -34,9 +40,37 @@
  * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
  * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
  * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
  *
- * @version 0.2
+ *
+ * --------------------------------------------------------------------------------
+ *
+ * Changes:
+ *
+ *
+ * Version 0.3.1:
+ *
+ * Fixed bug with undefined target
+ *
+ * Version 0.3:
+ *
+ * Doesn't submit &lt;button&gt; and &lt;input type="button|reset|image"&gt; values
+ * any more, since a browser wouldn't do so on a normal form submit, as long as this
+ * button isn't used for the submit.
+ *
+ * Added fifth parameter 'target'. This can be used to regain the behaviour of
+ * submitting the buttons value used in submitting the form.
+ *
+ * Checked against JSLint http://www.jslint.com/
+ *
+ * --------------------------------------------------------------------------------
+ *
+ * Credits:
+ *
+ * Thanks to Steffen Chmil <sc@dbtech.de> for the hint regarding the submit button values.
+ *
+ * --------------------------------------------------------------------------------
+ *
+ * @version 0.3.1
  * @author berhart@tladesignz.com
  *
  * @requires jQuery jQuery 1.2.3
@@ -46,44 +80,55 @@
  */
 (function() {
     /**
-     * @param {String} The URL of the page to load.
-     * @param {Object} The form object (or jQuery object holding the form) whose elements values should be sent.
-     * @param {Function} A function to be executed whenever the data is loaded successfully.
-     * @param {String} Type of data to be returned to callback function (JSON, XML, etc.)
+     * @param {String} url The URL of the page to load.
+     * @param {Object} form The form object (or jQuery object holding the form) whose elements values should be sent.
+     * @param {Function} callback (optional) A function to be executed whenever the data is loaded successfully.
+     * @param {String} type (optional) Type of data to be returned to callback function (JSON, XML, etc.)
+     * @param {Object} target (optional) Event target element which triggered this postForm call. Used to emulate
+     * behaviour of browsers standard form handling, which is: the form fields name and value triggering the form
+     * action will be sent, too.
      */
-    jQuery.postForm = function( url, form, callback, type ) {
-        var data = {};
-        var i;
-        var j;
-        var field;
-        var fType;
+    jQuery.postForm = function( url, form, callback, type, target ) {
+        var data = {}, i, j, field, fTag, fType;
 
         // remove jQuery wrapping of form object
         if (form.jquery) {
             form = form.get( 0 );
         }
 
-        if (!form || !form.tagName || !form.tagName.toLowerCase() == "form") {
-            throw( "Attempted to post a non-form element." );
+        if (!form || !form.tagName || !form.tagName.toLowerCase() === 'form') {
+            throw( 'Attempted to post a non-form element.' );
+        }
+
+        // BUGFIX: added test if 'target' is defined before it gets used
+        if (target && target.tagName.toLowerCase() !== 'button' && !target.type.match( /^submit|image$/i )) {
+            target = null;
         }
 
         for (i = 0; i < form.elements.length; ++i) {
             field = form.elements[ i ];
 
-            if (!field || field.tagName.toLowerCase() == "fieldset") {
+            if (!field) {
                 continue;
             }
 
+            fTag = field.tagName.toLowerCase();
             fType = field.type.toLowerCase();
 
-            if (fType == "select-multiple") {
+            // Never submit <fieldset>, <input type="reset"> and <button type="reset">.
+            // Submit <button> or <input type="submit|image"> values if this element was used to trigger the form submit.
+            if (fTag === 'fieldset' || fType === 'reset' || (fTag === 'button' || fType === 'submit' || fType === 'image') && field !== target) {
+                continue;
+            }
+
+            if (fType === 'select-multiple') {
                 for (j = 0; j < field.options.length; ++j) {
                     if (field.options[ j ].selected) {
                         add( data, field.name, field.options[ j ].value );
                     }
                 }
             }
-            else if (jQuery.inArray( fType, ["radio", "checkbox"] ) > -1) {
+            else if (fType === 'radio' || fType === 'checkbox') {
                 if (field.checked) {
                     add( data, field.name, field.value );
                 }
@@ -99,13 +144,13 @@
     /**
      * extends the value of an object's key dynamically to an array if more than one is added
      * @private
-     * @param {Object} a normal object
-     * @param {String} object's key
-     * @param {Any} value to add to object's key
+     * @param {Object} object a normal object
+     * @param {String} name object's key
+     * @param {Any} value value to add to object's key
      */
     function add( object, name, value ) {
         if (object[ name ]) {
-            if (typeof object[ name ] == 'object') {
+            if (typeof object[ name ] === 'object') {
                 object[ name ].push( value );
             }
             else {
